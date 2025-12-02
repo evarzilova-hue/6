@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <title>Социален Компас Икона</title>
+    <!-- Основен кръг (корпус на компаса) -->
+    <circle cx="50" cy="50" r="45" fill="#f0fdf4" stroke="#10b981" stroke-width="5"/>
+    <!-- Мишена/Център -->
+    <circle cx="50" cy="50" r="15" fill="#3b82f6"/>
+    <circle cx="50" cy="50" r="5" fill="#ffffff"/>
+    <!-- Стрелка (Социален компас) - насочена нагоре/правилно -->
+    <path d="M 50 10 L 65 50 L 50 90 L 35 50 Z" fill="#ef4444" stroke="#dc2626" stroke-width="1"/>
+    <path d="M 50 10 L 65 50 L 50 90 L 35 50 Z" fill="#ef4444" stroke="#dc2626" stroke-width="1" transform="rotate(180, 50, 50)"/>
+    <path d="M 50 10 L 55 50 L 50 90 L 45 50 Z" fill="#ffffff" stroke="#ffffff" stroke-width="1"/>
+    <!-- Акцент на върха (синята зона) -->
+    <path d="M 50 10 L 60 50 L 40 50 Z" fill="#3b82f6"/>
+    <!-- Надпис N/С -->
+    <text x="50" y="20" font-family="Inter, sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">С</text>
+</svg>
