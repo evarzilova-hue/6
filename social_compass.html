@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Социален Компас: Етичен Филтър</title>
+    
+    <!-- PWA Línks (Added for installability) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="compass-icon.svg">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #3b82f6; /* Blue-500 */
+            --color-secondary: #10b981; /* Emerald-500 */
+            --color-danger: #ef4444; /* Red-500 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Gray-100 */
+        }
+        .app-container {
+            max-width: 600px;
+            min-height: 100vh;
+            background-color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background-color: var(--color-primary);
+            transition: transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--color-danger);
+            transition: transform 0.1s;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+            transform: translateY(-1px);
+        }
+        .motto-banner {
+            background: linear-gradient(135deg, var(--color-primary) 0%, #60a5fa 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+        .question-card {
+            border-left: 4px solid var(--color-secondary);
+        }
+        /* Стил за съобщенията (замества alert()) */
+        #message-box {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            font-weight: 600;
+            display: none; /* Скрито по подразбиране */
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .msg-success { background-color: #10b981; }
+        .msg-error { background-color: #ef4444; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="app-container mx-auto p-4 flex flex-col">
+
+    <!-- Съобщение за зареждане / Грешка -->
+    <div id="loading-indicator" class="text-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+        <p class="mt-2 text-gray-600">Зареждане на приложението...</p>
+    </div>
+
+    <!-- Мото Банер -->
+    <div id="motto-area" class="motto-banner text-center mb-8 hidden">
+        <p class="text-xs font-semibold opacity-80 mb-1">ДИГИТАЛЕН НАРЪЧНИК:</p>
+        <p id="current-motto" class="text-lg font-bold italic"></p>
+    </div>
+
+    <!-- Основно Съдържание -->
+    <main id="main-content" class="flex-grow hidden">
+
+        <!-- Потребителска информация -->
+        <div class="mb-6 p-3 bg-gray-100 rounded-lg">
+            <p class="text-sm font-medium text-gray-500">Вашето потребителско ID:</p>
+            <p id="user-id-display" class="text-xs text-gray-800 break-all mt-1"></p>
+        </div>
+
+        <!-- СТЪПКА 1: Етичен Филтър -->
+        <div id="step-filter" class="space-y-4">
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-6">Етичен Филтър (Казус Адам Рейн)</h2>
+            <p class="text-sm text-gray-600 mb-4">Отговорете честно. Ако отговорите с "Да" на 2 или повече въпроса, системата активира "Мисия за физическа активност" за корекция на хормоналния баланс.</p>
+
+            <!-- Въпросите ще бъдат инжектирани тук от JavaScript -->
+        </div>
+
+        <!-- СТЪПКА 2: Резултат / Мисия -->
+        <div id="step-result" class="hidden text-center p-8 rounded-xl" style="background-color: #fefce8;">
+            <h2 id="result-title" class="text-3xl font-extrabold mb-4 text-gray-800"></h2>
+            <p id="result-message" class="text-lg text-gray-700 mb-6"></p>
+            <button id="reset-button" class="btn-primary px-6 py-2 rounded-full font-semibold text-white shadow-md">Повторен Тест</button>
+        </div>
+
+    </main>
+    
+    <!-- Custom Message Box -->
+    <div id="message-box"></div>
+
+</div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, collection, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Активиране на логове за дебъгване
+    // setLogLevel('Debug');
+
+    // --- ГЛОБАЛНИ КОНСТАНТИ И НАСТРОЙКИ ---
+    const MOTTOS = [
+        "Самоконтрол и ритъм побеждава мързела.",
+        "Животът е реалност, а не симулация.",
+        "Истинското богатство е човешката връзка.",
+        "Трудът краси човека.",
+        "Надеждата води дори в пустошта."
+    ];
+
+    const ETHICAL_QUESTIONS = [
+        "Има ли смисъл да заменяш истинското с измислица?",
+        "Пренебрегвате ли съня, храненето, хигиената или физическата си активност заради прекомерно време пред екрана?",
+        "Използвате ли дигитални платформи, за да избягате от реалните си проблеми?"
+    ];
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    let db, auth, userId;
+    let isAuthReady = false;
+
+    // --- UI ЕЛЕМЕНТИ ---
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const mottoArea = document.getElementById('motto-area');
+    const currentMottoEl = document.getElementById('current-motto');
+    const mainContent = document.getElementById('main-content');
+    const userIdDisplay = document.getElementById('user-id-display');
+    const stepFilter = document.getElementById('step-filter');
+    const stepResult = document.getElementById('step-result');
+    const resultTitle = document.getElementById('result-title');
+    const resultMessage = document.getElementById('result-message');
+    const resetButton = document.getElementById('reset-button');
+    const messageBox = document.getElementById('message-box');
+
+    // --- ФУНКЦИИ ---
+
+    // Показва персонализирано съобщение (замества alert())
+    function showMessage(text, type = 'success') {
+        messageBox.textContent = text;
+        messageBox.className = '';
+        messageBox.classList.add('fixed', 'msg-' + type);
+        messageBox.style.display = 'block';
+        setTimeout(() => messageBox.style.opacity = 1, 10);
+        setTimeout(() => {
+            messageBox.style.opacity = 0;
+            setTimeout(() => messageBox.style.display = 'none', 300);
+        }, 3000);
+    }
+    
+    // Инициализация на Firebase
+    async function initializeFirebase() {
+        try {
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase конфигурацията липсва. Продължаваме без Firestore.");
+                // В този случай, isAuthReady ще остане false, но приложението ще продължи
+                loadingIndicator.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+                initAppLogic();
+                return;
+            }
+
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            // Автентикация
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = userId;
+                    isAuthReady = true;
+                    console.log("Firebase Auth готов. Потребител ID:", userId);
+                    loadingIndicator.classList.add('hidden');
+                    mainContent.classList.remove('hidden');
+                    initAppLogic();
+                } else {
+                    console.log("Потребителят е излязъл или няма потребител.");
+                    userId = crypto.randomUUID(); // Fallback for userId if auth fails
+                    userIdDisplay.textContent = userId + " (Анонимен)";
+                    isAuthReady = true;
+                    loadingIndicator.classList.add('hidden');
+                    mainContent.classList.remove('hidden');
+                    initAppLogic();
+                }
+            });
+
+        } catch (error) {
+            console.error("Грешка при инициализация на Firebase:", error);
+            showMessage("Грешка при зареждане на услугата за данни.", 'error');
+            loadingIndicator.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+            initAppLogic(); // Зареждаме логиката дори при грешка, за да е ползваемо приложението
+        }
+    }
+
+    // Записва резултата във Firestore
+    async function saveResult(riskLevel, answers) {
+        if (!db || !userId) {
+            console.warn("Firestore не е достъпен. Резултатът не е записан.");
+            return;
+        }
+
+        const PRIVATE_COLLECTION_PATH = `artifacts/${appId}/users/${userId}/ethical_results`;
+        const resultDocRef = doc(collection(db, PRIVATE_COLLECTION_PATH)); // Нов документ
+
+        try {
+            await setDoc(resultDocRef, {
+                userId: userId,
+                risk: riskLevel,
+                answers: answers,
+                timestamp: serverTimestamp()
+            });
+            showMessage(`Резултатът (${riskLevel}) е успешно записан!`, 'success');
+        } catch (e) {
+            console.error("Грешка при записване на резултата:", e);
+            showMessage("Грешка при записване на резултата в базата данни.", 'error');
+        }
+    }
+
+    // Ротиращо мото
+    function startMottoRotation() {
+        let mottoIndex = Math.floor(Math.random() * MOTTOS.length);
+        currentMottoEl.textContent = MOTTOS[mottoIndex];
+        mottoArea.classList.remove('hidden');
+
+        setInterval(() => {
+            mottoIndex = (mottoIndex + 1) % MOTTOS.length;
+            currentMottoEl.textContent = MOTTOS[mottoIndex];
+        }, 8000); // Сменя мотото на всеки 8 секунди
+    }
+    
+    // Генериране на въпросите и бутона за филтъра
+    function renderFilter() {
+        stepFilter.innerHTML = `
+            <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-6">Етичен Филтър (Казус Адам Рейн)</h2>
+            <p class="text-sm text-gray-600 mb-6">Отговорете честно. Ако отговорите с "Да" на 2 или повече въпроса, системата активира "Мисия за физическа активност" за корекция на хормоналния баланс.</p>
+        `;
+
+        ETHICAL_QUESTIONS.forEach((question, index) => {
+            const qEl = document.createElement('div');
+            qEl.className = 'p-4 rounded-lg bg-white shadow-lg question-card mb-4';
+            qEl.innerHTML = `
+                <p class="font-semibold text-gray-700 mb-3">${index + 1}. ${question}</p>
+                <div class="flex space-x-4" data-question-index="${index}">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="q${index}" value="yes" class="form-radio h-4 w-4 text-red-600" required>
+                        <span class="ml-2 text-gray-700 font-medium">Да</span>
+                    </label>
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="q${index}" value="no" class="form-radio h-4 w-4 text-green-600" required>
+                        <span class="ml-2 text-gray-700 font-medium">Не</span>
+                    </label>
+                </div>
+            `;
+            stepFilter.appendChild(qEl);
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.id = 'submit-filter';
+        submitBtn.className = 'btn-primary w-full px-6 py-3 rounded-xl font-bold text-white shadow-lg mt-6';
+        submitBtn.textContent = 'Оцени Риска';
+        stepFilter.appendChild(submitBtn);
+
+        submitBtn.addEventListener('click', evaluateFilter);
+    }
+    
+    // Оценка на филтъра
+    function evaluateFilter() {
+        let yesCount = 0;
+        const answers = {};
+        let allAnswered = true;
+
+        ETHICAL_QUESTIONS.forEach((_, index) => {
+            const selected = document.querySelector(`input[name="q${index}"]:checked`);
+            if (!selected) {
+                allAnswered = false;
+                return;
+            }
+            answers[`q${index}`] = selected.value;
+            if (selected.value === 'yes') {
+                yesCount++;
+            }
+        });
+
+        if (!allAnswered) {
+            showMessage("Моля, отговорете на всички въпроси!", 'error');
+            return;
+        }
+
+        let riskLevel;
+        if (yesCount >= 2) {
+            // Активиране на Мисия за физическа активност (Survival Mission)
+            riskLevel = "Висок Риск (Адам Рейн)";
+            resultTitle.textContent = "⚠️ Активиране на Survival Mission ⚠️";
+            stepResult.style.backgroundColor = '#fef2f2'; // Red-50
+            resultTitle.classList.add('text-red-600');
+            resultMessage.innerHTML = `
+                <p class="mb-4">Според "Казуса Адам Рейн", резултатът Ви показва висок риск от загуба на режим/дисциплина. Задължително е да активирате **Мисия за физическа активност** за корекция на хормоналния баланс!</p>
+                <div class="p-4 rounded-lg border border-red-300 bg-red-50 text-left">
+                    <p class="font-bold text-red-800 mb-2">ВАШАТА МИСИЯ:</p>
+                    <ul class="list-disc list-inside text-sm text-red-700 space-y-1">
+                        <li>Изпълнете 30 минути умерена физическа активност днес (бързо ходене, бягане, планк).</li>
+                        <li>Осигурете си 8 часа сън през следващата нощ.</li>
+                        <li>Напомнете си: **Животът е реалност, а не симулация.**</li>
+                    </ul>
+                </div>
+            `;
+            resetButton.classList.remove('btn-primary');
+            resetButton.classList.add('btn-danger');
+        } else {
+            // Положителен резултат
+            riskLevel = "Нисък Риск";
+            resultTitle.textContent = "✅ Социален Компас: Зелена Зона";
+            stepResult.style.backgroundColor = '#f0fdf4'; // Green-50
+            resultTitle.classList.remove('text-red-600');
+            resultMessage.textContent = "Поздравления! Поддържате здравословен баланс между дигиталния и реалния живот. Продължавайте да цените истинските човешки връзки и дисциплината!";
+            resetButton.classList.add('btn-primary');
+            resetButton.classList.remove('btn-danger');
+        }
+
+        saveResult(riskLevel, answers);
+
+        stepFilter.classList.add('hidden');
+        stepResult.classList.remove('hidden');
+    }
+
+    // Рестартиране на филтъра
+    function resetFilter() {
+        // Изчистване на всички радио бутони
+        document.querySelectorAll('input[type="radio"]').forEach(radio => radio.checked = false);
+        stepResult.classList.add('hidden');
+        stepFilter.classList.remove('hidden');
+    }
+    
+    // Основна логика на приложението
+    function initAppLogic() {
+        startMottoRotation();
+        renderFilter();
+        resetButton.addEventListener('click', resetFilter);
+    }
+
+    // Стартиране на инициализацията
+    window.onload = initializeFirebase;
+
+</script>
+
+</body>
+</html>
